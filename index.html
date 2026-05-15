@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de arquitectura — CRM Academia Diabetes Online</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --panel: #161616;
+    --panel-2: #1c1c1c;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --muted: #8a8a8a;
+    --client: #4ea1ff;
+    --route: #7bd389;
+    --service: #c792ea;
+    --db: #ffb86b;
+    --external: #ff6b9d;
+    --critical: #ff3860;
+    --accent: #f5b942;
+    --accent-2: #ff7a45;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  #topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 16px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+    flex-wrap: wrap;
+  }
+  #title { font-weight: 600; font-size: 14px; }
+  #subtitle { color: var(--muted); font-size: 11px; }
+
+  #filters { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .chip {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 11px; border-radius: 14px; cursor: pointer; font-size: 11px;
+    transition: all .15s ease;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+  .chip.critical-chip { border-left: 3px solid var(--critical); }
+  .chip.dead-chip { color: var(--muted); }
+
+  #controls { display: flex; gap: 6px; }
+  .ctrl-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  .ctrl-btn:hover { background: var(--border); }
+
+  #container { display: flex; height: calc(100vh - 53px); }
+  #canvas-wrap { flex: 1; overflow: hidden; position: relative; cursor: grab; background: var(--bg); }
+  #canvas-wrap.dragging { cursor: grabbing; }
+  svg#map { width: 100%; height: 100%; user-select: none; display: block; }
+
+  #sidebar {
+    width: 380px; min-width: 380px; max-width: 380px;
+    background: var(--panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 16px;
+  }
+  #sidebar h2 { margin: 0 0 4px; font-size: 14px; }
+  #sidebar h3 { margin: 14px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #sidebar .role { font-size: 12px; color: var(--accent); margin-bottom: 6px; }
+  #sidebar .plain { font-size: 12.5px; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+  #sidebar .path { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--muted); background: var(--panel-2); padding: 4px 7px; border-radius: 4px; display: inline-block; margin-bottom: 6px; word-break: break-all; }
+  #sidebar ul { margin: 4px 0 8px; padding-left: 18px; }
+  #sidebar li { font-size: 11.5px; margin: 2px 0; color: var(--text); }
+  #sidebar li.muted { color: var(--muted); }
+  #sidebar .tag { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: 10px; background: var(--panel-2); color: var(--muted); margin: 2px 3px 2px 0; }
+  #sidebar .edge-in, #sidebar .edge-out { font-size: 11px; }
+  #sidebar .edge-in li::before { content: "← "; color: var(--accent-2); }
+  #sidebar .edge-out li::before { content: "→ "; color: var(--client); }
+  #sidebar .finding { padding: 8px 10px; background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 4px; margin-bottom: 8px; font-size: 11.5px; line-height: 1.5; }
+  #sidebar .finding strong { color: var(--accent); }
+  #sidebar .legend { font-size: 11px; color: var(--muted); }
+  #sidebar .legend span { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; }
+  #sidebar a { color: var(--client); text-decoration: none; }
+  #sidebar a:hover { text-decoration: underline; }
+
+  /* SVG node styles */
+  .cluster-bg { fill: rgba(255,255,255,0.015); stroke: var(--border); stroke-width: 1; rx: 8; }
+  .cluster-label { fill: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .node-rect { fill: var(--panel-2); stroke-width: 1.5; rx: 6; cursor: pointer; transition: filter .15s ease; }
+  .node-rect:hover { filter: brightness(1.4); }
+  .node-rect.critical { stroke-width: 2.2; }
+  .node-rect.selected { filter: brightness(1.6); stroke-width: 2.5; }
+  .node-rect.dimmed { opacity: 0.18; }
+  .node-label { fill: var(--text); font-size: 11.5px; font-weight: 600; pointer-events: none; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .node-sub { fill: var(--muted); font-size: 10px; pointer-events: none; }
+  .node-sub.dead { fill: var(--critical); font-weight: 600; }
+  .node-sub.giant { fill: var(--accent); }
+  .node-sub.canary { fill: var(--accent-2); }
+  .edge-path { fill: none; stroke-width: 1.4; pointer-events: none; }
+  .edge-path.kind-critical { stroke: var(--critical); stroke-width: 2.4; }
+  .edge-path.kind-mount { stroke: var(--client); stroke-dasharray: 4,3; }
+  .edge-path.kind-api { stroke: var(--accent-2); }
+  .edge-path.kind-db { stroke: var(--db); }
+  .edge-path.kind-normal { stroke: #555; stroke-width: 1; }
+  .edge-path.dimmed { opacity: 0.08; }
+  .edge-label { fill: var(--muted); font-size: 10px; pointer-events: none; }
+  .edge-label.kind-critical { fill: var(--critical); font-weight: 600; }
+  .edge-label.dimmed { opacity: 0; }
+  marker#arrow-critical path { fill: var(--critical); }
+  marker#arrow-mount path { fill: var(--client); }
+  marker#arrow-api path { fill: var(--accent-2); }
+  marker#arrow-db path { fill: var(--db); }
+  marker#arrow-normal path { fill: #555; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div>
+    <div id="title">CRM Academia Diabetes Online</div>
+    <div id="subtitle">Mapa de arquitectura — Evaluación Horus, mayo 2026</div>
+  </div>
+  <div id="filters"></div>
+  <div id="controls">
+    <button class="ctrl-btn" id="zoom-out" title="Alejar">−</button>
+    <button class="ctrl-btn" id="zoom-in" title="Acercar">+</button>
+    <button class="ctrl-btn" id="fit" title="Ajustar a pantalla">⊡</button>
+  </div>
+</div>
+
+<div id="container">
+  <div id="canvas-wrap">
+    <svg id="map" viewBox="0 0 2360 1280" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow-critical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+        <marker id="arrow-mount" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+        <marker id="arrow-api" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+        <marker id="arrow-db" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+        <marker id="arrow-normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
+      </defs>
+      <g id="zoom-root"></g>
+    </svg>
+  </div>
+  <aside id="sidebar"></aside>
+</div>
+
+<script>
+// ============================================================================
+//  CRM Academia Diabetes Online — Mapa de arquitectura
+//  Editar a mano: clusters / nodes / edges siguen un formato literal.
+// ============================================================================
+
+const clusters = [
+  { id: 'entry',    label: 'Entrada',          x:   40, y: 120, w:  320, h:  480 },
+  { id: 'audience', label: 'Audiencias',       x:  400, y: 120, w:  320, h:  830 },
+  { id: 'views',    label: 'Vistas (50+ activeView)', x: 760, y: 120, w: 360, h: 1100 },
+  { id: 'services', label: 'Services (24)',    x: 1160, y: 120, w:  420, h: 1080 },
+  { id: 'data',     label: 'Supabase backend', x: 1620, y: 120, w:  420, h: 1080 },
+  { id: 'external', label: 'Integraciones',    x: 2080, y: 120, w:  240, h:  720 },
+];
+
+const N = (id, cluster, label, sub, x, y, w, h, color, opts = {}) => ({
+  id, cluster, label, sub, x, y, w, h, color, ...opts
+});
+
+const nodes = [
+  // ─── ENTRY ─────────────────────────────────────────────────────────────────
+  N('entry-html', 'entry', 'index.html', 'monta #root', 60, 170, 280, 64, 'client', {
+    role: 'Página HTML raíz que carga /index.tsx',
+    plain: 'El único archivo HTML del sistema. Vite lo sirve y desde aquí React arranca dentro del <div id="root">.',
+    path: 'index.html',
+    notes: ['Una sola página (SPA)', 'Carga /index.tsx como módulo ES'],
+    tag: ['overview', 'all'],
+  }),
+  N('entry-tsx', 'entry', 'index.tsx', 'React.createRoot + intercept', 60, 250, 280, 64, 'client', {
+    role: 'Arranque de React; intercepta hashes de recuperación de Supabase',
+    plain: 'Antes de montar la app reescribe la URL si Supabase te devuelve un token de recuperación de contraseña, para que HashRouter no se pierda.',
+    path: 'index.tsx:10-30',
+    notes: ['Líneas 10-18: hack de recovery token', 'Líneas 25-30: createRoot + render(<App />)'],
+    tag: ['overview', 'all'],
+  }),
+  N('entry-app', 'entry', 'App.tsx', 'HashRouter + Routes', 60, 330, 280, 64, 'client', {
+    role: 'Configura HashRouter y declara las 10 rutas públicas; envuelve todo en ToastProvider',
+    plain: 'Aquí viven las pocas rutas que React Router realmente conoce: login, registro, recuperar contraseña, etc. Todo lo demás del CRM ocurre dentro de AppContent sin cambiar la URL.',
+    path: 'App.tsx:879-918',
+    notes: ['Solo 10 rutas reales de React Router', 'HashRouter (no BrowserRouter): URLs con #/', 'L.898: /registro pública sin token'],
+    tag: ['overview', 'onboarding', 'all'],
+  }),
+  N('entry-appcontent', 'entry', 'AppContent', 'switch sobre activeView', 60, 410, 280, 64, 'client', {
+    role: 'Componente gigante que sirve de router interno con un switch sobre activeView (~55 valores)',
+    plain: 'En vez de usar rutas anidadas, todo el CRM autenticado vive aquí dentro: una sola pantalla que cambia de contenido según un campo "activeView". Eso explica por qué App.tsx tiene 920 líneas.',
+    path: 'App.tsx:110-877',
+    notes: ['L.115: enum de 55+ valores', 'L.665-872: switch enorme', 'Sin AuthProvider — sesión en localStorage + state local'],
+    tag: ['overview', 'all'],
+    critical: true,
+  }),
+  N('entry-supabase', 'entry', 'supabaseClient.ts', 'createClient', 60, 490, 280, 64, 'client', {
+    role: 'Instancia raw del SDK de Supabase con fallback hardcoded',
+    plain: 'Crea el cliente que habla con Supabase. Si faltan variables de entorno, cae a la URL del proyecto del cliente — eso mantiene el sistema andando aunque no se haya configurado bien.',
+    path: 'services/supabaseClient.ts:5-8',
+    notes: ['Fallback hardcoded: zugtswtpoohnpycnjwrp.supabase.co', 'anon key embebido (público por diseño, no service role)', 'Único archivo que importa @supabase/supabase-js'],
+    tag: ['overview', 'all'],
+  }),
+
+  // ─── AUDIENCE ──────────────────────────────────────────────────────────────
+  N('aud-router', 'audience', 'HashRouter', '10 rutas públicas', 420, 170, 280, 64, 'client', {
+    role: '10 rutas públicas: login, recuperar contraseña, registro, bienvenida, activación, landing',
+    plain: 'Las URLs que sí existen como tales: /login, /registro, /forgot-password, /update-password, /activar-cuenta/:token, /equipo/unirse/:token, /bienvenida/:token, y /app/* que delega a AppContent.',
+    path: 'App.tsx:888-914',
+    notes: ['HashRouter: URLs viven después del #', 'L.898: /registro es público (sin token)', 'L.913: cualquier ruta desconocida → /login'],
+    tag: ['overview', 'onboarding', 'all'],
+  }),
+  N('aud-layout', 'audience', 'Layout.tsx', 'shell staff', 420, 250, 280, 64, 'client', {
+    role: 'Sidebar + cabecera para todas las vistas de staff (no para clientes)',
+    plain: 'Es el marco visual que ve un coach, closer o admin: sidebar con iconos, contador de pendientes, alertas de riesgo, menú móvil.',
+    path: 'components/Layout.tsx',
+    notes: ['Solo se monta para staff (App.tsx:663)', 'Navegación vía callback onNavigate'],
+    tag: ['overview', 'all'],
+  }),
+  N('aud-login', 'audience', 'Login.tsx', 'identificador + password', 420, 330, 280, 64, 'client', {
+    role: 'Formulario de login (email o teléfono + password) que pasa por mockAuth.login',
+    plain: 'Pantalla de entrada. Acepta email o teléfono. Por debajo llama a mockSupabase.mockAuth.login para validar contra Supabase Auth.',
+    path: 'components/Login.tsx',
+    notes: ['Login.tsx → mockAuth.login (mockSupabase)', 'Guarda sesión en localStorage ado_crm_session por 30 días'],
+    tag: ['overview', 'all'],
+  }),
+  N('aud-landing', 'audience', 'LandingPage.tsx', 'home pública', 420, 410, 280, 64, 'client', {
+    role: 'Página pública de marketing en /',
+    plain: 'Lo primero que ve cualquier visitante sin sesión. Desde aquí salen los links que terminan en formulario público o /registro.',
+    path: 'components/landing/LandingPage.tsx',
+    notes: ['Carpeta landing/ tiene 4 archivos', 'Punto de entrada de Tally (form externo)'],
+    tag: ['overview', 'onboarding', 'all'],
+  }),
+  N('aud-register', 'audience', 'RegistrationPage.tsx', 'wizard 9 pasos', 420, 490, 280, 64, 'client', {
+    role: 'Wizard de 9 pasos: personal · médico · medidas · actividad · nutrición · objetivos · coach · credenciales · resumen',
+    plain: 'El formulario largo que rellena un cliente nuevo después de comprar. Recoge toda la información clínica, comercial y de hábitos, crea la cuenta en Supabase Auth, inserta en clientes_ado_notion y dispara webhook a n8n.',
+    path: 'components/registration/RegistrationPage.tsx:246-498',
+    notes: ['L.246-356: build clientData (60+ campos property_*)', 'L.358-385: upsert clientes_ado_notion', 'L.392-432: auth.signUp', 'L.450-469: insert sales fire-and-forget', 'L.472-498: webhook n8n_webhook_onboarding_completed'],
+    tag: ['overview', 'onboarding', 'all'],
+    critical: true,
+  }),
+  N('aud-anamnesis', 'audience', 'AnamnesisPortal', 'Phase 2 obligatoria', 420, 570, 280, 64, 'client', {
+    role: 'Formulario médico profundo bloqueante: hasta que no se completa el cliente no entra al portal',
+    plain: 'Después del registro, el cliente queda en limbo hasta rellenar la anamnesis (historia clínica detallada). Esto fuerza al coach a tener datos antes de asignar plan.',
+    path: 'components/anamnesis/',
+    notes: ['App.tsx:594-600: bloquea acceso al portal hasta onboarding_phase2_completed=true', 'Modo previsualización staff: App.tsx:631-660'],
+    tag: ['overview', 'onboarding', 'all'],
+    critical: true,
+  }),
+  N('aud-portal-v1', 'audience', 'client-portal/', 'ClientPortalDashboard (29 archivos)', 420, 650, 280, 64, 'client', {
+    role: 'Portal del cliente v1: planificador nutricional, check-ins, training, glucosa, ciclo, renovaciones',
+    plain: 'Lo que ve un cliente activo cuando entra. Tiene casi todo: subir foto de comida, check-in semanal, entrenos, ciclo menstrual, glucosa. Es la versión que usan los 230 clientes reales.',
+    path: 'components/client-portal/ClientPortalDashboard.tsx',
+    notes: ['29 archivos dentro de la carpeta', 'Lazy loaded (App.tsx:24)', 'Renderizado en App.tsx:608'],
+    tag: ['overview', 'client-portal', 'ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('aud-portal-v2', 'audience', 'client-portal-v2/', 'ClientPortalV2 (canary)', 420, 730, 280, 64, 'client', {
+    role: 'Rediseño canary del portal: MiSemana, Progreso, ToDo (1 archivo + 3 screens)',
+    plain: 'Versión nueva experimental del portal, todavía pequeña (~5% del v1). Solo la ven 3 emails de prueba; los 230 clientes reales siguen viendo el v1.',
+    path: 'components/client-portal-v2/ClientPortalV2.tsx',
+    notes: ['Solo 3 emails de prueba', 'Trae feature nueva: análisis semanal + to-do', 'Decidir: continuar rollout o congelar'],
+    tag: ['client-portal', 'all'],
+  }),
+  N('aud-portal-flag', 'audience', 'PORTAL_V2_EMAILS', 'feature flag literal', 420, 810, 280, 64, 'client', {
+    role: 'Array de 3 emails hardcodeado que decide quién ve v2',
+    plain: 'No hay sistema de feature flags real: la decisión de a quién enseñarle el v2 vive en un array literal con 3 emails al principio de App.tsx. Cambiarlo requiere editar el código y desplegar.',
+    path: 'App.tsx:27-28',
+    notes: ['Emails: prueba@gmail.com, testalta5@gmail.com, academiadiabetesonline@gmail.com', 'Aplica en App.tsx:603-605', 'Sin GrowthBook/LaunchDarkly'],
+    tag: ['client-portal', 'all'],
+  }),
+
+  // ─── VIEWS (14) ────────────────────────────────────────────────────────────
+  N('view-clientdetail', 'views', 'ClientDetail.tsx', '8.972 LOC · 8 tabs · gigante', 780, 170, 320, 80, 'route', {
+    role: 'Ficha completa del cliente para staff: 8 tabs en un solo archivo monolítico',
+    plain: 'La pantalla más grande del CRM. Cuando un coach abre a un cliente ve aquí todo: datos personales, seguimiento, performance, salud, programa, contrato, materiales, notas. Todo cabe en un único archivo de casi 9.000 líneas.',
+    path: 'components/ClientDetail.tsx',
+    notes: ['8 tabs: overview · seguimiento · performance · health · program · contract · materials · notas', 'Tab Salud → subtab nutrición renderiza ClientNutritionSelector (~L.6315)', 'Refactor candidato pero alto riesgo'],
+    tag: ['overview', 'nutrition', 'training', 'accounting-renewals', 'all'],
+  }),
+  N('view-clientlist', 'views', 'ClientList.tsx', 'lista filtrada por rol', 780, 270, 320, 56, 'route', {
+    role: 'Lista de clientes filtrada por rol (admin ve todos, coach solo los suyos)',
+    plain: 'Tabla principal de clientes con filtros, búsqueda, cambio de estado masivo. El filtrado por rol pasa antes a través de filteredClients en AppContent.',
+    path: 'components/ClientList.tsx',
+    notes: ['Filtrado en App.tsx:241-261'],
+    tag: ['overview', 'all'],
+  }),
+  N('view-executivedash', 'views', 'ExecutiveDashboard', 'admin · head_coach', 780, 340, 320, 56, 'route', {
+    role: 'Dashboard de dirección con KPIs globales',
+    plain: 'Lo que ven los roles admin y head_coach: vista panorámica con métricas de retención, ingresos, capacidad de coaches.',
+    path: 'components/ExecutiveDashboard.tsx',
+    notes: ['Activado en App.tsx:826'],
+    tag: ['overview', 'all'],
+  }),
+  N('view-dashboard', 'views', 'Dashboard.tsx', 'coach · 1.891 LOC', 780, 410, 320, 56, 'route', {
+    role: 'Dashboard genérico de coach: tareas, alertas, asignaciones nuevas, KPIs personales',
+    plain: 'Lo que ve un coach al entrar: clientes activos, churn, renovaciones pendientes, asignaciones recientes, queue de nutrición. Es la home del trabajo diario.',
+    path: 'components/Dashboard.tsx',
+    notes: ['1.891 líneas — gigante', 'Activado en App.tsx:850 (caso default)'],
+    tag: ['overview', 'all'],
+  }),
+  N('view-closerdash', 'views', 'CloserDashboard', '1.944 LOC · gigante', 780, 480, 320, 56, 'route', {
+    role: 'Dashboard de ventas: pipeline, ventas vivas, capacidad de coaches, integración Hotmart',
+    plain: 'Pantalla de los closers (cierran ventas). Aquí registran cada venta nueva, asignan coach, generan link de pago con Hotmart. Es el origen del flujo de onboarding.',
+    path: 'components/CloserDashboard.tsx',
+    notes: ['Integración Hotmart ~L.1200-1500', 'Activado en App.tsx:842', 'Cada sale → dispara webhook n8n_webhook_new_sale'],
+    tag: ['overview', 'onboarding', 'accounting-renewals', 'all'],
+    critical: true,
+  }),
+  N('view-accountingdash', 'views', 'AccountingDashboard', '2.114 LOC · gigante', 780, 550, 320, 56, 'route', {
+    role: 'Dashboard de contabilidad: ingresos, gastos marketing, comisiones, facturas',
+    plain: 'Pantalla de contabilidad: ROI por canal de marketing, comisiones por closer, facturas a coaches, retención mensual.',
+    path: 'components/AccountingDashboard.tsx',
+    notes: ['2.114 líneas', 'Activado para rol contabilidad'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('view-renewals', 'views', 'RenewalCallsManager', '2.014 LOC', 780, 620, 320, 56, 'route', {
+    role: 'Gestor de llamadas de renovación: ventana 90/60/30 días, log de llamadas, ofertas',
+    plain: 'Aquí se gestionan las llamadas de renovación de contrato. Calcula automáticamente clientes que están por vencer y guarda el resultado de cada llamada.',
+    path: 'components/RenewalCallsManager.tsx',
+    notes: ['Lee renewal_calls + vista v_renovaciones_mensuales'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('view-nutritionhub', 'views', 'NutritionHub', 'biblioteca y planes', 780, 690, 320, 56, 'route', {
+    role: 'Hub central de nutrición: planes, recetas, asignaciones, biblioteca global',
+    plain: 'Donde el equipo de nutrición trabaja con la biblioteca de planes y recetas. Subdominio aparte del CRM general.',
+    path: 'components/nutrition/',
+    notes: ['38 archivos', 'AIPlanImporter.tsx → Gemini', 'En curso 2026-05: editor inline desde ficha'],
+    tag: ['nutrition', 'all'],
+  }),
+  N('view-training', 'views', 'training/', 'workouts, clases', 780, 760, 320, 56, 'route', {
+    role: 'Vistas de entrenamiento: programas, sesiones, registro de strength, clases',
+    plain: 'Hub de entrenamiento. Coaches asignan programas, registran 1RM, agendan clases en vivo.',
+    path: 'components/training/',
+    notes: ['21 archivos', 'Clon funcional de Harbiz', 'BUG-T1 pendiente: editar programa global afecta a todos'],
+    tag: ['training', 'all'],
+  }),
+  N('view-reviews', 'views', 'ReviewsView', 'check-ins semanales', 780, 830, 320, 56, 'route', {
+    role: 'Panel de revisiones semanales del coach (lunes-martes)',
+    plain: 'Donde los coaches revisan los check-ins que el cliente subió viernes-domingo. Marca como "revisado" y deja feedback. Es el otro extremo del ciclo semanal.',
+    path: 'components/ReviewsView.tsx',
+    notes: ['Lee weekly_checkins', 'Date math: ~L.800 usa lastFridayUtcStart'],
+    tag: ['ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('view-chat', 'views', 'ChatView', 'cliente ↔ coach', 780, 900, 320, 56, 'route', {
+    role: 'Mensajería interna cliente-coach con adjuntos (fotos, PDFs)',
+    plain: 'Chat dentro del CRM para que cliente y coach hablen sin salir del sistema. Usa Supabase Realtime para notificaciones.',
+    path: 'components/chat/',
+    notes: ['Subscribe a chat_messages vía supabase.channel (App.tsx:208-238)'],
+    tag: ['client-portal', 'all'],
+  }),
+  N('view-testimonials', 'views', 'TestimonialsManager', 'sync con Notion', 780, 970, 320, 56, 'route', {
+    role: 'Gestor de testimonios con auto-scheduling en Notion (calendario interno)',
+    plain: 'Cuando un cliente da un testimonio, aquí se gestiona y se programa automáticamente en un calendario que vive en Notion.',
+    path: 'components/TestimonialsManager.tsx',
+    notes: ['Invoca Edge Function notion-testimonials', 'Único uso de Notion en runtime'],
+    tag: ['all'],
+  }),
+  N('view-storyteller', 'views', 'storyteller/', 'DEAD · 0 callers', 780, 1040, 320, 56, 'route', {
+    role: 'Módulo de narrativa visceral con Gemini — cero imports desde fuera',
+    plain: 'Una carpeta con 2 archivos que usan Gemini para generar "narrativas viscerales" de comida. Nadie del CRM la llama. Está olvidada en el repo.',
+    path: 'components/storyteller/',
+    notes: ['2 archivos: StorytellerModule.tsx, services/storytellerService.ts', 'grep no encuentra imports desde fuera de la carpeta', 'Candidato directo a borrar'],
+    tag: ['dead-code', 'all'],
+  }),
+  N('view-admindata', 'views', 'admin-data-center/', 'VACÍA', 780, 1110, 320, 56, 'route', {
+    role: 'Carpeta vacía en components/',
+    plain: 'Quedó como residuo legacy: el activeView "admin-data-center" sí existe (línea 821 de App.tsx) pero su carpeta no tiene archivos. AdminDataCenter se importa desde otro sitio.',
+    path: 'components/admin-data-center/',
+    notes: ['0 archivos', 'Limpiar carpeta'],
+    tag: ['dead-code', 'all'],
+  }),
+
+  // ─── SERVICES (24) — Col 1 (x=1180) ────────────────────────────────────────
+  N('svc-mockSupabase', 'services', 'mockSupabase.ts', '2.917 LOC · capa REAL', 1180, 170, 180, 64, 'service', {
+    role: 'A pesar del nombre, NO es un mock: es la capa de abstracción real frente a Supabase. Todo el sistema pasa por aquí.',
+    plain: 'El gate central de datos. Aunque su nombre sugiere que es un mock para tests, en realidad es la fachada real que envuelve a Supabase. Cualquier lectura o escritura de clientes pasa por este archivo.',
+    path: 'services/mockSupabase.ts',
+    notes: ['2.917 LOC — el archivo más grande del proyecto', 'Exporta mockAuth, mockDb, mockAdmin, clientService', 'L.1696, L.2300: sendTelegramSafe en cambios de status', 'Renombrar y dividir es alto valor pero alto riesgo'],
+    tag: ['overview', 'onboarding', 'ciclo-semanal', 'nutrition', 'training', 'all'],
+    critical: true,
+  }),
+  N('svc-nutritionService', 'services', 'nutritionService.ts', '1.899 LOC · gigante', 1180, 242, 180, 64, 'service', {
+    role: 'Hub de nutrición: planes, recetas, asignaciones, overrides, versionado, auto-match',
+    plain: 'Donde vive toda la lógica de nutrición. Hace demasiadas cosas para un solo archivo; se puede dividir en plans / assignments / recipes sin romper nada.',
+    path: 'services/nutritionService.ts',
+    notes: ['1.899 LOC', 'Refactor 2026-04-30 arregló 5 bugs históricos', 'Soporta visibility_scope global vs personal'],
+    tag: ['nutrition', 'all'],
+  }),
+  N('svc-trainingService', 'services', 'trainingService.ts', '', 1180, 314, 180, 56, 'service', {
+    role: 'Programas de entrenamiento, workouts diarios, logs de ejercicio',
+    plain: 'Maneja toda la cadena de entrenamiento: del programa al log de cada ejercicio.',
+    path: 'services/trainingService.ts',
+    notes: ['Tablas: training_programs, training_workout_blocks, training_workouts', 'BUG-T1 pendiente: visibility_scope no aplicado'],
+    tag: ['training', 'all'],
+  }),
+  N('svc-telegramService', 'services', 'telegramService.ts', 'fachada → send-telegram', 1180, 386, 180, 56, 'service', {
+    role: 'Fachada cliente para invocar la Edge Function send-telegram',
+    plain: 'Centraliza cómo se mandan mensajes de Telegram. Nunca habla con Telegram directamente: siempre pasa por la Edge Function que tiene el token del bot.',
+    path: 'services/telegramService.ts:56',
+    notes: ['supabase.functions.invoke("send-telegram", ...)', 'sendTelegramSafe: fire-and-forget'],
+    tag: ['ciclo-semanal', 'all'],
+  }),
+  N('svc-leadsService', 'services', 'leadsService.ts', '', 1180, 458, 180, 56, 'service', {
+    role: 'Gestión de leads: cualificación, asignación a closers',
+    plain: 'Maneja los leads desde que entran (de Tally, Instagram) hasta que se convierten o se descartan.',
+    path: 'services/leadsService.ts',
+    notes: [],
+    tag: ['onboarding', 'all'],
+  }),
+  N('svc-paymentService', 'services', 'paymentService.ts', '', 1180, 530, 180, 56, 'service', {
+    role: 'Facturación, tracking de pagos, payroll del staff',
+    plain: 'Toda la lógica de dinero: facturas a coaches, pagos a clientes, comisiones, payroll.',
+    path: 'services/paymentService.ts',
+    notes: [],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-renewalCallsService', 'services', 'renewalCallsService.ts', '', 1180, 602, 180, 56, 'service', {
+    role: 'Programación de llamadas de renovación 90/60/30 días',
+    plain: 'Calcula automáticamente la ventana en la que hay que llamar a cada cliente para renovar su contrato.',
+    path: 'services/renewalCallsService.ts',
+    notes: ['Lee vista v_renovaciones_mensuales'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-riskAlertService', 'services', 'riskAlertService.ts', '', 1180, 674, 180, 56, 'service', {
+    role: 'Predicción de churn: clientes con check-ins fallidos, estancamientos de peso',
+    plain: 'Detecta clientes en riesgo de abandono cruzando datos de check-ins, peso y adherencia.',
+    path: 'services/riskAlertService.ts',
+    notes: [],
+    tag: ['ciclo-semanal', 'all'],
+  }),
+  N('svc-pauseService', 'services', 'pauseService.ts', '', 1180, 746, 180, 56, 'service', {
+    role: 'Pausas y reactivaciones de contrato (extiende contract_end_date)',
+    plain: 'Cuando un cliente pausa su programa (vacaciones, enfermedad), aquí se calcula la pausa y se extiende su fecha de fin de contrato al reactivar.',
+    path: 'services/pauseService.ts',
+    notes: ['Tabla: contract_pauses', 'Al pausar status=paused; al reactivar suma días + status=active'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-alimentosService', 'services', 'alimentosService.ts', '', 1180, 818, 180, 56, 'service', {
+    role: 'Buscador de la biblioteca de alimentos',
+    plain: 'Base de datos de alimentos para componer recetas y planes.',
+    path: 'services/alimentosService.ts',
+    notes: [],
+    tag: ['nutrition', 'all'],
+  }),
+  N('svc-chatService', 'services', 'chatService.ts', '', 1180, 890, 180, 56, 'service', {
+    role: 'Mensajería interna con adjuntos vía Supabase Storage',
+    plain: 'Gestiona el chat cliente-coach incluyendo subida de archivos.',
+    path: 'services/chatService.ts',
+    notes: ['Supabase Storage para adjuntos'],
+    tag: ['client-portal', 'all'],
+  }),
+  N('svc-achievementService', 'services', 'achievementService.ts', '', 1180, 962, 180, 56, 'service', {
+    role: 'Badges y milestones del cliente (pérdida peso, glucosa, pasos)',
+    plain: 'Gamificación: medallas que se desbloquean cuando el cliente alcanza objetivos.',
+    path: 'services/achievementService.ts',
+    notes: [],
+    tag: ['client-portal', 'all'],
+  }),
+
+  // ─── SERVICES — Col 2 (x=1380) ─────────────────────────────────────────────
+  N('svc-closerMetrics', 'services', 'closerMetricsService.ts', '', 1380, 170, 180, 56, 'service', {
+    role: 'KPIs del equipo de ventas: conversión, ticket medio, comisiones',
+    plain: 'Métricas que ve cada closer y la dirección sobre cuánto cierran.',
+    path: 'services/closerMetricsService.ts',
+    notes: [],
+    tag: ['accounting-renewals', 'onboarding', 'all'],
+  }),
+  N('svc-coachMetrics', 'services', 'coachMetricsService.ts', '', 1380, 242, 180, 56, 'service', {
+    role: 'Performance del coach: retención, reviews, escalafón de tier',
+    plain: 'Métricas que mide a cada coach: cuántos clientes mantiene, calidad de reviews, tier al que asciende.',
+    path: 'services/coachMetricsService.ts',
+    notes: [],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-setterMetrics', 'services', 'setterMetricsService.ts', '', 1380, 314, 180, 56, 'service', {
+    role: 'KPIs del setter (quien agenda llamadas con el closer)',
+    plain: 'Métricas de los setters: cuántas llamadas agendan y cuántas se cierran.',
+    path: 'services/setterMetricsService.ts',
+    notes: [],
+    tag: ['onboarding', 'all'],
+  }),
+  N('svc-financialMetrics', 'services', 'financialMetricsService.ts', '', 1380, 386, 180, 56, 'service', {
+    role: 'Marketing spend y ROI por canal',
+    plain: 'Cuánto se gasta en cada canal de captación (Ads, Influencers) y cuánto retorna.',
+    path: 'services/financialMetricsService.ts',
+    notes: [],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-contractHistory', 'services', 'contractHistoryService.ts', '', 1380, 458, 180, 56, 'service', {
+    role: 'Audit trail de cambios de contrato',
+    plain: 'Histórico de todas las transiciones de estado del contrato de cada cliente.',
+    path: 'services/contractHistoryService.ts',
+    notes: ['Tabla: contract_history'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('svc-processTracking', 'services', 'processTrackingService.ts', '', 1380, 530, 180, 56, 'service', {
+    role: 'Goals 3m/6m/1año por fases de programa',
+    plain: 'Maneja los objetivos del cliente en distintas ventanas temporales y los va revisando.',
+    path: 'services/processTrackingService.ts',
+    notes: ['coach_goals + monthly/quarterly_reviews'],
+    tag: ['all'],
+  }),
+  N('svc-successPlan', 'services', 'successPlanService.ts', '', 1380, 602, 180, 56, 'service', {
+    role: 'Plan de éxito por fases (entry/intermediate/advanced)',
+    plain: 'Define las fases en las que vive cada cliente dentro de su programa.',
+    path: 'services/successPlanService.ts',
+    notes: [],
+    tag: ['all'],
+  }),
+  N('svc-strength', 'services', 'strengthService.ts', '', 1380, 674, 180, 56, 'service', {
+    role: 'Benchmarks de fuerza y progresión de 1RM',
+    plain: 'Registros de fuerza máxima del cliente y su evolución.',
+    path: 'services/strengthService.ts',
+    notes: [],
+    tag: ['training', 'all'],
+  }),
+  N('svc-nutritionSpecial', 'services', 'nutritionSpecialReq...', '', 1380, 746, 180, 56, 'service', {
+    role: 'Workflow coach → nutricionista para plan personalizado',
+    plain: 'Cuando un coach quiere un plan a medida para un cliente, abre un "special request" que llega al nutricionista.',
+    path: 'services/nutritionSpecialRequestsService.ts',
+    notes: [],
+    tag: ['nutrition', 'all'],
+  }),
+  N('svc-trainingSpecial', 'services', 'trainingSpecialReq...', '', 1380, 818, 180, 56, 'service', {
+    role: 'Workflow coach → trainer para programa personalizado',
+    plain: 'Equivalente al de nutrición pero para entrenamiento.',
+    path: 'services/trainingSpecialRequestsService.ts',
+    notes: [],
+    tag: ['training', 'all'],
+  }),
+  N('svc-trainingLimits', 'services', 'clientTrainingLimits...', '', 1380, 890, 180, 56, 'service', {
+    role: 'Restricciones físicas/médicas que limitan el entrenamiento del cliente',
+    plain: 'Limitaciones de salud que condicionan el plan de entrenamiento (lesiones, contraindicaciones).',
+    path: 'services/clientTrainingLimitationsService.ts',
+    notes: [],
+    tag: ['training', 'all'],
+  }),
+  N('svc-supabaseClient', 'services', 'supabaseClient.ts', 'cliente raw', 1380, 962, 180, 56, 'service', {
+    role: 'El cliente raw del SDK (createClient) que el resto de services importa',
+    plain: 'Es solo una línea: crea la instancia de Supabase. Todos los demás services lo importan en vez de crear su propia conexión.',
+    path: 'services/supabaseClient.ts',
+    notes: ['Único archivo que importa @supabase/supabase-js', 'Fallback hardcoded a project ref zugtswtpoohnpycnjwrp'],
+    tag: ['all'],
+  }),
+
+  // ─── DATA — Col 1 (x=1640) Edge Functions (8) ──────────────────────────────
+  N('data-send-telegram', 'data', 'send-telegram', 'Edge Function · Deno', 1640, 170, 180, 64, 'db', {
+    role: 'Edge Function que habla con la Telegram Bot API y logea cada envío',
+    plain: 'El único punto del sistema que conoce el token del bot de Telegram. Cualquier mensaje a un cliente pasa por aquí. Loguea el resultado en telegram_messages_log.',
+    path: 'supabase/functions/send-telegram/index.ts',
+    notes: ['Valida JWT staff (is_staff() = true)', 'Scopes: client, coach_clients, all_active, custom', 'Token nunca expuesto al frontend'],
+    tag: ['ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('data-scheduled-reminders', 'data', 'scheduled-reminders', 'Edge Function · cron', 1640, 250, 180, 64, 'db', {
+    role: 'Cron único: recordatorios viernes/domingo + clases. Llama a send-telegram.',
+    plain: 'Es el único cron del sistema. Se dispara desde pg_cron de Postgres y manda los recordatorios automáticos del ciclo semanal y de clases en vivo.',
+    path: 'supabase/functions/scheduled-reminders/index.ts',
+    notes: ['lastFridayUtcStart en L.52-58 define la semana viernes-jueves', 'kinds: checkin_friday, checkin_sunday, class_reminder', 'Auth: header x-cron-secret', 'SINGLE POINT OF FAILURE del ciclo semanal'],
+    tag: ['ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('data-notify-feedback', 'data', 'notify-feedback', 'Edge Function · Slack', 1640, 330, 180, 64, 'db', {
+    role: 'Postea feedback nuevo y cambios de estado a Slack en 2 canales distintos',
+    plain: 'Cuando alguien manda feedback dentro del CRM (un bug, una idea), avisa por Slack. Eventos nuevos van a #avisos-crm, cambios de estado a #dudas-crm.',
+    path: 'supabase/functions/notify-feedback/index.ts:50-120',
+    notes: ['2 eventos: new → #avisos-crm, status_change → #dudas-crm', 'Renderiza Slack Block Kit con botón "Ver en el CRM"'],
+    tag: ['all'],
+  }),
+  N('data-notion-testimonials', 'data', 'notion-testimonials', 'Edge Function · Notion', 1640, 410, 180, 64, 'db', {
+    role: 'Auto-programa testimonios en calendario de Notion priorizando miércoles/domingo',
+    plain: 'Cuando un cliente da un testimonio, busca un hueco libre en un calendario que vive en Notion y lo agenda automáticamente.',
+    path: 'supabase/functions/notion-testimonials/index.ts',
+    notes: ['Notion solo se usa para esto en runtime'],
+    tag: ['all'],
+  }),
+  N('data-check-notion-status', 'data', 'check-notion-status', 'Edge Function · health', 1640, 490, 180, 64, 'db', {
+    role: 'Health check de la integración con Notion',
+    plain: 'Pinga Notion para comprobar que la conexión sigue viva. Llamada desde la UI.',
+    path: 'supabase/functions/check-notion-status/index.ts',
+    notes: [],
+    tag: ['all'],
+  }),
+  N('data-invite-user', 'data', 'invite-user', 'Edge Function · email', 1640, 570, 180, 64, 'db', {
+    role: 'Crea usuario + manda email de onboarding (Resend o SendGrid)',
+    plain: 'Crea atómicamente la cuenta de un usuario nuevo y le manda el email para activarla.',
+    path: 'supabase/functions/invite-user/index.ts',
+    notes: ['SDK de email no aparece en package.json — verificar', 'Llamada desde mockSupabase.ts'],
+    tag: ['onboarding', 'all'],
+  }),
+  N('data-delete-user', 'data', 'delete-user', 'Edge Function', 1640, 650, 180, 64, 'db', {
+    role: 'Borrado en cascada: usuario + cliente + assignments',
+    plain: 'Eliminar a un cliente o staff requiere limpiar varias tablas. Esto lo hace atómicamente desde el backend.',
+    path: 'supabase/functions/delete-user/index.ts',
+    notes: [],
+    tag: ['all'],
+  }),
+  N('data-quarterly-summary', 'data', 'generate-quarterly...', 'Edge Function · AI', 1640, 730, 180, 64, 'db', {
+    role: 'Resume trimestralmente los objetivos del cliente con IA (revisión endocrino)',
+    plain: 'Cada trimestre genera un resumen del cliente para la revisión endocrina.',
+    path: 'supabase/functions/generate-quarterly-summary/index.ts',
+    notes: [],
+    tag: ['all'],
+  }),
+
+  // ─── DATA — Col 2 (x=1840) Tables (14) ─────────────────────────────────────
+  N('data-clientes', 'data', 'clientes_ado_notion', 'tabla master · property_*', 1840, 170, 180, 64, 'db', {
+    role: 'Tabla central del sistema: 60+ columnas property_* (residuo de import desde Notion)',
+    plain: 'La tabla más importante: cada fila es un cliente. Los nombres de columna empiezan por property_* porque originalmente se importaron desde Notion y nunca se renombraron.',
+    path: 'tabla clientes_ado_notion',
+    notes: ['property_coach puede ser nombre O UUID', 'RLS actual: "Staff see all clients" — riesgo RGPD', 'property_estado_cliente sync con status vía trigger Notion'],
+    tag: ['overview', 'onboarding', 'ciclo-semanal', 'nutrition', 'training', 'accounting-renewals', 'all'],
+    critical: true,
+  }),
+  N('data-users', 'data', 'users', 'staff profiles', 1840, 250, 180, 64, 'db', {
+    role: 'Tabla pública de perfiles staff (rol, nombre, especialidad, tier)',
+    plain: 'Aquí viven los datos de cada miembro del equipo: nombre, rol, especialidad, comisión.',
+    path: 'tabla public.users',
+    notes: ['Posible desincronización con auth.users — pendiente fix con función + trigger'],
+    tag: ['all'],
+  }),
+  N('data-auth-users', 'data', 'auth.users', 'Supabase Auth', 1840, 330, 180, 64, 'db', {
+    role: 'Tabla nativa de Supabase Auth con credenciales',
+    plain: 'Lo que Supabase gestiona internamente para login: email, hash de password, JWT.',
+    path: 'auth.users (gestionado por Supabase)',
+    notes: ['Sync con public.users no garantizada'],
+    tag: ['onboarding', 'all'],
+  }),
+  N('data-sales', 'data', 'sales', 'ventas + comisiones', 1840, 410, 180, 64, 'db', {
+    role: 'Cada transacción comercial con cliente, closer asignado, importe',
+    plain: 'Una fila por venta cerrada. Origen del onboarding: una sale "won" dispara el resto de la cadena.',
+    path: 'tabla sales',
+    notes: ['Insert también desde RegistrationPage L.450-469 (auto-registro)'],
+    tag: ['onboarding', 'accounting-renewals', 'all'],
+    critical: true,
+  }),
+  N('data-leads', 'data', 'leads', 'pipeline pre-venta', 1840, 490, 180, 64, 'db', {
+    role: 'Lead pipeline (origen, etapa, asignación a setter)',
+    plain: 'Antes de que sea cliente, es un lead. Aquí se rastrean los intentos del setter de agendar y del closer de convertir.',
+    path: 'tabla leads',
+    notes: [],
+    tag: ['onboarding', 'all'],
+  }),
+  N('data-weekly-checkins', 'data', 'weekly_checkins', 'self-report cliente', 1840, 570, 180, 64, 'db', {
+    role: 'Self-report semanal del cliente: peso, glucosa, adherencia, mood',
+    plain: 'Una fila por check-in semanal que sube el cliente. Es la materia prima de las reviews del coach.',
+    path: 'tabla weekly_checkins',
+    notes: ['Ciclo viernes-jueves', 'Estados: sin enviar / pendiente / revisado'],
+    tag: ['ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('data-nutrition-plans', 'data', 'nutrition_plans', 'biblioteca + personal', 1840, 650, 180, 64, 'db', {
+    role: 'Planes nutricionales: globales (biblioteca) y personales (por cliente)',
+    plain: 'Cada plan vive aquí, con campo visibility_scope que distingue plan de biblioteca de plan personal de un cliente.',
+    path: 'tabla nutrition_plans',
+    notes: ['visibility_scope: global | personal', 'personal_client_id apunta al dueño'],
+    tag: ['nutrition', 'all'],
+  }),
+  N('data-client-nutrition', 'data', 'client_nutrition_assign', 'plan activo cliente', 1840, 730, 180, 64, 'db', {
+    role: 'Plan nutricional asignado a cada cliente con start/end_date',
+    plain: 'Une cada cliente con el plan nutricional activo y desde cuándo lo tiene.',
+    path: 'tabla client_nutrition_assignments',
+    notes: [],
+    tag: ['nutrition', 'all'],
+  }),
+  N('data-training-programs', 'data', 'training_programs', 'workouts globales', 1840, 810, 180, 64, 'db', {
+    role: 'Programas de entrenamiento (plantillas)',
+    plain: 'Plantillas de entrenamiento (beginner, intermediate, advanced) que se asignan a clientes.',
+    path: 'tabla training_programs',
+    notes: ['BUG-T1 pendiente: visibility_scope no aplicado, editar uno global afecta a todos'],
+    tag: ['training', 'all'],
+  }),
+  N('data-client-training', 'data', 'client_training_assign', '', 1840, 890, 180, 64, 'db', {
+    role: 'Programa de entrenamiento activo por cliente',
+    plain: 'Une cliente con su programa actual de entrenamiento.',
+    path: 'tabla client_training_assignments',
+    notes: [],
+    tag: ['training', 'all'],
+  }),
+  N('data-renewal-calls', 'data', 'renewal_calls', '', 1840, 970, 180, 56, 'db', {
+    role: 'Llamadas de renovación programadas y resultados',
+    plain: 'Log de cada intento de renovación: cuándo se llamó, resultado, oferta hecha.',
+    path: 'tabla renewal_calls',
+    notes: ['Sincronizado con clientes_ado_notion.contract_end_date'],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('data-contract-pauses', 'data', 'contract_pauses', '', 1840, 1042, 180, 56, 'db', {
+    role: 'Audit de pausas de contrato (vacaciones, salud)',
+    plain: 'Cada pausa que toma un cliente queda registrada para luego extender su fecha de fin de contrato.',
+    path: 'tabla contract_pauses',
+    notes: [],
+    tag: ['accounting-renewals', 'all'],
+  }),
+  N('data-telegram-log', 'data', 'telegram_messages_log', 'auditoría envíos', 1640, 810, 180, 56, 'db', {
+    role: 'Log de cada mensaje de Telegram (enviado, skipped, fallido)',
+    plain: 'Cada envío de Telegram queda registrado aquí para auditar y detectar grupos rotos.',
+    path: 'tabla telegram_messages_log',
+    notes: ['Insertado por send-telegram y scheduled-reminders'],
+    tag: ['ciclo-semanal', 'all'],
+  }),
+  N('data-app-settings', 'data', 'app_settings', 'webhooks URLs', 1640, 882, 180, 56, 'db', {
+    role: 'Configuración runtime: URLs de webhooks n8n, flags ON/OFF',
+    plain: 'Tabla key-value con configuración que se cambia sin redeploy: URL del webhook de n8n, si está activado, etc.',
+    path: 'tabla app_settings',
+    notes: ['Keys: n8n_webhook_onboarding_completed, n8n_webhook_enabled'],
+    tag: ['onboarding', 'all'],
+  }),
+
+  // ─── EXTERNAL (9) ──────────────────────────────────────────────────────────
+  N('ext-telegram', 'external', 'Telegram Bot API', 'mensajes a clientes', 2100, 170, 200, 64, 'external', {
+    role: 'API pública de Telegram a la que llama send-telegram',
+    plain: 'El destino final de los mensajes a clientes. Cada cliente tiene su grupo privado y el bot escribe ahí.',
+    path: 'api.telegram.org/bot{TOKEN}/sendMessage',
+    notes: ['Token vive en Supabase secrets (TELEGRAM_BOT_TOKEN)', 'Cliente sin telegram_group_id válido → skipped'],
+    tag: ['ciclo-semanal', 'all'],
+    critical: true,
+  }),
+  N('ext-notion', 'external', 'Notion API', 'calendario testimonios', 2100, 250, 200, 64, 'external', {
+    role: 'API de Notion solo usada para auto-programar testimonios',
+    plain: 'Notion es el calendario donde el equipo de marketing decide cuándo se publica cada testimonio.',
+    path: 'api.notion.com',
+    notes: ['No usado para sync de clientes en runtime (eso es trigger en BD)'],
+    tag: ['all'],
+  }),
+  N('ext-slack', 'external', 'Slack API', '#avisos-crm · #dudas-crm', 2100, 330, 200, 64, 'external', {
+    role: 'Slack para feedback nuevo y cambios de estado',
+    plain: 'Donde el equipo recibe avisos del CRM (bugs reportados, cambios de estado de feedbacks).',
+    path: 'slack.com/api/chat.postMessage',
+    notes: ['2 canales fijos: #avisos-crm y #dudas-crm', 'Token en Supabase secrets (SLACK_BOT_TOKEN)'],
+    tag: ['all'],
+  }),
+  N('ext-gemini', 'external', 'Gemini API', '@google/generative-ai', 2100, 410, 200, 64, 'external', {
+    role: 'Google Gemini usado en runtime para 2 cosas',
+    plain: 'La única IA que el sistema invoca en producción. Se usa para (1) parsear planes nutricionales pegados como texto y (2) generar narrativa visceral en el módulo huérfano storyteller.',
+    path: '@google/generative-ai 0.24.1',
+    notes: ['Importer: components/nutrition/AIPlanImporter.tsx', 'Storyteller: componentes/storyteller/ (módulo muerto)', 'API key vive del lado cliente'],
+    tag: ['nutrition', 'dead-code', 'all'],
+  }),
+  N('ext-resend', 'external', 'Resend (¿?)', 'email · sin SDK', 2100, 490, 200, 64, 'external', {
+    role: 'Servicio de email transaccional invocado desde invite-user — qué SDK usa no es claro',
+    plain: 'Para mandar emails (de invitación, recuperación) el sistema usa un servicio externo, pero su SDK no está declarado en package.json. Verificar.',
+    path: '(invocado desde invite-user)',
+    notes: ['Verificar si está activo y con qué proveedor', 'Var de entorno: posiblemente RESEND_API_KEY'],
+    tag: ['onboarding', 'all'],
+  }),
+  N('ext-n8n', 'external', 'n8n (webhooks)', 'mismo VPS · workflows', 2100, 570, 200, 64, 'external', {
+    role: 'Workflows en n8n (Hostinger VPS) que reciben webhooks fire-and-forget',
+    plain: 'n8n hace de pegamento: recibe avisos del CRM cuando hay una venta nueva o un onboarding completo y dispara cosas (envío de contrato PDF, emails, etc.).',
+    path: 'academia-diabetes-online-n8n.k5pdeb.easypanel.host',
+    notes: ['Mismo VPS de Hostinger que el CRM', 'URLs en app_settings (no hardcoded)', 'Hooks: n8n_webhook_new_sale, n8n_webhook_onboarding_completed'],
+    tag: ['onboarding', 'all'],
+    critical: true,
+  }),
+  N('ext-tally', 'external', 'Tally', 'form lead (legacy)', 2100, 650, 200, 64, 'external', {
+    role: 'Formulario público externo de captación de leads',
+    plain: 'Formulario embebido en la landing de marketing. Cuando alguien lo completa, dispara un webhook que termina creando un lead.',
+    path: 'tally.so',
+    notes: ['No tiene imports activos en el cliente (se invoca por webhook externo)'],
+    tag: ['onboarding', 'all'],
+    critical: true,
+  }),
+  N('ext-loom', 'external', 'Loom', 'URLs en coaching_sessions', 2100, 730, 200, 64, 'external', {
+    role: 'Loom NO se llama por SDK — solo se guardan URLs',
+    plain: 'Los coaches graban videos en Loom y pegan la URL en sus notas de sesión. El CRM solo almacena el link.',
+    path: 'columna coaching_sessions.video_notes',
+    notes: ['Sin SDK, sin auth — solo URLs'],
+    tag: ['all'],
+  }),
+  N('ext-hotmart', 'external', 'Hotmart', 'links de pago', 2100, 810, 200, 64, 'external', {
+    role: 'Pasarela de pagos invocada desde CloserDashboard',
+    plain: 'Cuando un closer cierra una venta, genera el link de pago en Hotmart desde su dashboard.',
+    path: 'components/CloserDashboard.tsx ~L.1200-1500',
+    notes: ['Solo genera links — no procesa pagos directamente'],
+    tag: ['onboarding', 'accounting-renewals', 'all'],
+  }),
+];
+
+// ============================================================================
+//  EDGES
+// ============================================================================
+const edges = [
+  // ── Mounts (rutas reales de React Router)
+  { from: 'entry-html', to: 'entry-tsx', kind: 'normal', label: '<script>', tag: ['all'] },
+  { from: 'entry-tsx', to: 'entry-app', kind: 'normal', label: 'render', tag: ['all'] },
+  { from: 'entry-app', to: 'aud-router', kind: 'mount', label: 'HashRouter', tag: ['overview', 'all'] },
+  { from: 'aud-router', to: 'aud-login', kind: 'mount', label: '/login', tag: ['overview', 'all'] },
+  { from: 'aud-router', to: 'aud-landing', kind: 'mount', label: '/', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-router', to: 'aud-register', kind: 'mount', label: '/registro', tag: ['onboarding', 'all'] },
+  { from: 'aud-router', to: 'entry-appcontent', kind: 'mount', label: '/app/*', tag: ['overview', 'all'] },
+
+  // ── AppContent → views (state switch)
+  { from: 'entry-appcontent', to: 'view-clientdetail', kind: 'normal', label: 'selectedClient', tag: ['overview', 'all'] },
+  { from: 'entry-appcontent', to: 'view-clientlist', kind: 'normal', label: 'clients', tag: ['overview', 'all'] },
+  { from: 'entry-appcontent', to: 'view-executivedash', kind: 'normal', label: 'admin/head_coach', tag: ['overview', 'all'] },
+  { from: 'entry-appcontent', to: 'view-dashboard', kind: 'normal', label: 'coach', tag: ['overview', 'all'] },
+  { from: 'entry-appcontent', to: 'view-closerdash', kind: 'normal', label: 'closer', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'entry-appcontent', to: 'view-accountingdash', kind: 'normal', label: 'contabilidad', tag: ['accounting-renewals', 'all'] },
+  { from: 'entry-appcontent', to: 'view-renewals', kind: 'normal', label: 'renewals', tag: ['accounting-renewals', 'all'] },
+  { from: 'entry-appcontent', to: 'view-nutritionhub', kind: 'normal', label: 'nutrition-hub', tag: ['nutrition', 'all'] },
+  { from: 'entry-appcontent', to: 'view-training', kind: 'normal', label: 'training-mgmt', tag: ['training', 'all'] },
+  { from: 'entry-appcontent', to: 'view-reviews', kind: 'normal', label: 'reviews', tag: ['ciclo-semanal', 'all'] },
+  { from: 'entry-appcontent', to: 'view-chat', kind: 'normal', label: 'chat', tag: ['client-portal', 'all'] },
+  { from: 'entry-appcontent', to: 'view-testimonials', kind: 'normal', label: 'testimonials', tag: ['all'] },
+  { from: 'entry-appcontent', to: 'aud-portal-v1', kind: 'normal', label: 'client role', tag: ['overview', 'client-portal', 'all'] },
+  { from: 'aud-portal-flag', to: 'aud-portal-v2', kind: 'normal', label: 'email match', tag: ['client-portal', 'all'] },
+  { from: 'aud-portal-flag', to: 'aud-portal-v1', kind: 'normal', label: 'default', tag: ['client-portal', 'all'] },
+
+  // ── Critical onboarding spine (1..14)
+  { from: 'ext-tally', to: 'aud-landing', kind: 'critical', label: '1 · form público', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-landing', to: 'data-leads', kind: 'critical', label: '2 · captura lead', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'view-closerdash', to: 'data-sales', kind: 'critical', label: '3 · INSERT sales', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'view-closerdash', to: 'ext-n8n', kind: 'critical', label: '4 · webhook new_sale', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'ext-n8n', to: 'aud-register', kind: 'critical', label: '5 · email /registro?token', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-register', to: 'data-auth-users', kind: 'critical', label: '6 · signUp L.395-432', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-register', to: 'data-clientes', kind: 'critical', label: '7 · INSERT L.246-385', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-register', to: 'data-sales', kind: 'critical', label: '8 · sales L.450-469', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-register', to: 'ext-n8n', kind: 'critical', label: '9 · webhook L.472-498', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-register', to: 'aud-anamnesis', kind: 'critical', label: '10 · Phase 2', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'aud-anamnesis', to: 'data-clientes', kind: 'critical', label: '11 · phase2_completed=true', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'data-clientes', to: 'aud-portal-v1', kind: 'critical', label: '12 · coach asignado', tag: ['overview', 'onboarding', 'all'] },
+  { from: 'data-scheduled-reminders', to: 'data-send-telegram', kind: 'critical', label: '13 · cron welcome', tag: ['overview', 'onboarding', 'ciclo-semanal', 'all'] },
+  { from: 'data-send-telegram', to: 'ext-telegram', kind: 'critical', label: '14 · Bot API', tag: ['overview', 'onboarding', 'ciclo-semanal', 'all'] },
+
+  // ── mockSupabase es el gate
+  { from: 'entry-appcontent', to: 'svc-mockSupabase', kind: 'normal', label: 'mockDb/mockAuth', tag: ['overview', 'all'] },
+  { from: 'aud-login', to: 'svc-mockSupabase', kind: 'normal', label: 'mockAuth.login', tag: ['overview', 'all'] },
+  { from: 'svc-mockSupabase', to: 'data-clientes', kind: 'db', label: 'SELECT/UPDATE', tag: ['overview', 'all'] },
+  { from: 'svc-mockSupabase', to: 'data-weekly-checkins', kind: 'db', label: '', tag: ['ciclo-semanal', 'all'] },
+  { from: 'svc-mockSupabase', to: 'svc-telegramService', kind: 'normal', label: 'sendTelegramSafe L.1696,2300', tag: ['ciclo-semanal', 'all'] },
+  { from: 'svc-supabaseClient', to: 'svc-mockSupabase', kind: 'normal', label: 'supabase', tag: ['all'] },
+
+  // ── Telegram pipeline
+  { from: 'svc-telegramService', to: 'data-send-telegram', kind: 'api', label: 'functions.invoke', tag: ['ciclo-semanal', 'all'] },
+  { from: 'data-send-telegram', to: 'data-telegram-log', kind: 'db', label: 'log', tag: ['ciclo-semanal', 'all'] },
+
+  // ── Service → table
+  { from: 'svc-nutritionService', to: 'data-nutrition-plans', kind: 'db', label: '', tag: ['nutrition', 'all'] },
+  { from: 'svc-nutritionService', to: 'data-client-nutrition', kind: 'db', label: '', tag: ['nutrition', 'all'] },
+  { from: 'svc-trainingService', to: 'data-training-programs', kind: 'db', label: '', tag: ['training', 'all'] },
+  { from: 'svc-trainingService', to: 'data-client-training', kind: 'db', label: '', tag: ['training', 'all'] },
+  { from: 'svc-pauseService', to: 'data-contract-pauses', kind: 'db', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'svc-pauseService', to: 'data-clientes', kind: 'db', label: 'status', tag: ['accounting-renewals', 'all'] },
+  { from: 'svc-paymentService', to: 'data-sales', kind: 'db', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'svc-leadsService', to: 'data-leads', kind: 'db', label: '', tag: ['onboarding', 'all'] },
+  { from: 'svc-closerMetrics', to: 'data-leads', kind: 'db', label: '', tag: ['onboarding', 'all'] },
+  { from: 'svc-closerMetrics', to: 'data-sales', kind: 'db', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'svc-renewalCallsService', to: 'data-renewal-calls', kind: 'db', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'svc-riskAlertService', to: 'data-clientes', kind: 'db', label: '', tag: ['ciclo-semanal', 'all'] },
+  { from: 'svc-riskAlertService', to: 'data-weekly-checkins', kind: 'db', label: '', tag: ['ciclo-semanal', 'all'] },
+  { from: 'svc-chatService', to: 'data-clientes', kind: 'db', label: '', tag: ['client-portal', 'all'] },
+  { from: 'svc-coachMetrics', to: 'data-users', kind: 'db', label: '', tag: ['accounting-renewals', 'all'] },
+
+  // ── Edge functions → external + tables
+  { from: 'data-notify-feedback', to: 'ext-slack', kind: 'api', label: 'chat.postMessage', tag: ['all'] },
+  { from: 'data-notion-testimonials', to: 'ext-notion', kind: 'api', label: 'pages + query', tag: ['all'] },
+  { from: 'data-check-notion-status', to: 'ext-notion', kind: 'api', label: 'health', tag: ['all'] },
+  { from: 'data-invite-user', to: 'ext-resend', kind: 'api', label: 'send email', tag: ['onboarding', 'all'] },
+  { from: 'data-invite-user', to: 'data-auth-users', kind: 'db', label: 'create user', tag: ['onboarding', 'all'] },
+  { from: 'data-delete-user', to: 'data-auth-users', kind: 'db', label: '', tag: ['all'] },
+  { from: 'data-delete-user', to: 'data-clientes', kind: 'db', label: 'cascada', tag: ['all'] },
+  { from: 'data-quarterly-summary', to: 'data-clientes', kind: 'db', label: 'lee historia', tag: ['all'] },
+  { from: 'data-scheduled-reminders', to: 'data-clientes', kind: 'db', label: 'lista activos', tag: ['ciclo-semanal', 'all'] },
+  { from: 'data-scheduled-reminders', to: 'data-weekly-checkins', kind: 'db', label: 'sin enviar?', tag: ['ciclo-semanal', 'all'] },
+
+  // ── ClientPortal + ClientDetail → services
+  { from: 'aud-portal-v1', to: 'svc-nutritionService', kind: 'normal', label: '', tag: ['client-portal', 'nutrition', 'all'] },
+  { from: 'aud-portal-v1', to: 'svc-trainingService', kind: 'normal', label: '', tag: ['client-portal', 'training', 'all'] },
+  { from: 'aud-portal-v1', to: 'svc-chatService', kind: 'normal', label: '', tag: ['client-portal', 'all'] },
+  { from: 'aud-portal-v1', to: 'svc-mockSupabase', kind: 'normal', label: '', tag: ['client-portal', 'ciclo-semanal', 'all'] },
+  { from: 'aud-portal-v1', to: 'data-weekly-checkins', kind: 'db', label: 'INSERT check-in', tag: ['client-portal', 'ciclo-semanal', 'all'] },
+  { from: 'view-clientdetail', to: 'svc-mockSupabase', kind: 'normal', label: '', tag: ['overview', 'all'] },
+  { from: 'view-clientdetail', to: 'svc-nutritionService', kind: 'normal', label: 'Salud→Nutrición', tag: ['nutrition', 'all'] },
+  { from: 'view-clientdetail', to: 'svc-trainingService', kind: 'normal', label: 'Salud→Training', tag: ['training', 'all'] },
+  { from: 'view-nutritionhub', to: 'svc-nutritionService', kind: 'normal', label: '', tag: ['nutrition', 'all'] },
+  { from: 'view-nutritionhub', to: 'ext-gemini', kind: 'api', label: 'AIPlanImporter', tag: ['nutrition', 'all'] },
+  { from: 'view-training', to: 'svc-trainingService', kind: 'normal', label: '', tag: ['training', 'all'] },
+  { from: 'view-renewals', to: 'svc-renewalCallsService', kind: 'normal', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'view-closerdash', to: 'svc-closerMetrics', kind: 'normal', label: '', tag: ['accounting-renewals', 'onboarding', 'all'] },
+  { from: 'view-closerdash', to: 'ext-hotmart', kind: 'api', label: 'link de pago', tag: ['onboarding', 'all'] },
+  { from: 'view-accountingdash', to: 'svc-financialMetrics', kind: 'normal', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'view-accountingdash', to: 'svc-paymentService', kind: 'normal', label: '', tag: ['accounting-renewals', 'all'] },
+  { from: 'view-reviews', to: 'data-weekly-checkins', kind: 'db', label: 'UPDATE revisado', tag: ['ciclo-semanal', 'all'] },
+  { from: 'view-reviews', to: 'svc-mockSupabase', kind: 'normal', label: '', tag: ['ciclo-semanal', 'all'] },
+  { from: 'view-testimonials', to: 'data-notion-testimonials', kind: 'api', label: 'invoke', tag: ['all'] },
+
+  // ── Storyteller (DEAD) → Gemini
+  { from: 'view-storyteller', to: 'ext-gemini', kind: 'normal', label: 'sin caller externo', tag: ['dead-code', 'all'] },
+
+  // ── Webhook config
+  { from: 'aud-register', to: 'data-app-settings', kind: 'db', label: 'lee URL webhook', tag: ['onboarding', 'all'] },
+
+  // ── Recovery hash interception
+  { from: 'entry-tsx', to: 'data-auth-users', kind: 'api', label: 'recovery token', tag: ['all'] },
+];
+
+// ============================================================================
+//  HALLAZGOS NOTABLES — sidebar default
+// ============================================================================
+const FINDINGS = [
+  { t: 'components/storyteller/ está muerto', d: '2 archivos, cero imports desde fuera, usa Gemini. Candidato directo a borrar.' },
+  { t: 'components/admin-data-center/ vacía', d: 'Carpeta legacy sin archivos. El activeView "admin-data-center" sí existe pero AdminDataCenter se importa desde otro sitio. Limpiar.' },
+  { t: 'mockSupabase.ts mal nombrado y monolítico', d: '2.917 LOC. NO es un mock: es la capa REAL de Supabase y todo el sistema depende de ella. Renombrar + segmentar es alto valor pero alto riesgo (red de tests primero).' },
+  { t: 'nutritionService.ts (1.899 LOC)', d: 'Divisible en 3 (plans / assignments / recipes) sin tocar nada más. Refactor 2026-04-30 ya arregló 5 bugs históricos.' },
+  { t: '"Routing" mayoritariamente fake', d: 'Solo 10 rutas reales de React Router. 50+ vistas viven en un switch sobre activeView dentro de AppContent (App.tsx:115, 665-872). Por eso App.tsx tiene 920 LOC.' },
+  { t: 'Sin AuthProvider central', d: 'La sesión vive en localStorage + estado local de AppContent. Cualquier refactor de auth toca un único archivo gigante.' },
+  { t: 'Hardcoded fallback de Supabase URL + anon key', d: 'En supabaseClient.ts:5-6. Si falta .env, cae a credenciales del proyecto. El anon key es público por diseño pero el fallback debería avisar en vez de seguir.' },
+  { t: 'Flag portal v2 hardcodeada a 3 emails', d: 'App.tsx:27 es un array literal. No hay infra de feature flags propia.' },
+  { t: 'Resend no aparece en package.json', d: 'invite-user manda emails pero el SDK no está declarado en dependencias. Verificar si el SDK se carga desde Edge runtime o si está roto en producción.' },
+  { t: 'scheduled-reminders es el único cron', d: 'Todo el ciclo semanal pasa por una sola Edge Function disparada por pg_cron. Single point of failure: si falla, ningún cliente recibe recordatorio el viernes/domingo.' },
+  { t: 'RLS de clientes_ado_notion permisiva', d: '"Staff see all clients" deja a cualquier miembro del equipo ver datos médicos (property_insulina, property_patologias, property_medicacion). Relevante para RGPD.' },
+  { t: 'ClientDetail.tsx 8.972 LOC en 8 tabs', d: 'overview · seguimiento · performance · health · program · contract · materials · notas. El bulto de la deuda técnica vive aquí — refactor candidato pero alto riesgo.' },
+];
+
+// ============================================================================
+//  RENDER
+// ============================================================================
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('map');
+const root = document.getElementById('zoom-root');
+const sidebar = document.getElementById('sidebar');
+const filtersEl = document.getElementById('filters');
+
+const FILTER_CHIPS = [
+  { id: 'overview', label: 'Overview', critical: true },
+  { id: 'onboarding', label: 'Onboarding', critical: true },
+  { id: 'ciclo-semanal', label: 'Ciclo semanal' },
+  { id: 'nutrition', label: 'Nutrición' },
+  { id: 'training', label: 'Training' },
+  { id: 'client-portal', label: 'Portal cliente' },
+  { id: 'accounting-renewals', label: 'Contabilidad / Renovaciones' },
+  { id: 'dead-code', label: 'Código muerto', dead: true },
+  { id: 'all', label: 'Mostrar todo' },
+];
+
+let activeFilter = 'overview';
+let selectedNode = null;
+
+function colorVar(c) {
+  return { client: 'var(--client)', route: 'var(--route)', service: 'var(--service)', db: 'var(--db)', external: 'var(--external)' }[c] || 'var(--text)';
+}
+
+function renderClusters() {
+  for (const c of clusters) {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'cluster');
+    const rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('class', 'cluster-bg');
+    rect.setAttribute('x', c.x); rect.setAttribute('y', c.y);
+    rect.setAttribute('width', c.w); rect.setAttribute('height', c.h);
+    rect.setAttribute('rx', 10);
+    g.appendChild(rect);
+    const lbl = document.createElementNS(NS, 'text');
+    lbl.setAttribute('class', 'cluster-label');
+    lbl.setAttribute('x', c.x + 14); lbl.setAttribute('y', c.y + 22);
+    lbl.textContent = c.label;
+    g.appendChild(lbl);
+    root.appendChild(g);
+  }
+}
+
+function nodeById(id) { return nodes.find(n => n.id === id); }
+
+function renderEdges() {
+  const layer = document.createElementNS(NS, 'g');
+  layer.setAttribute('id', 'edges');
+  for (const e of edges) {
+    const a = nodeById(e.from);
+    const b = nodeById(e.to);
+    if (!a || !b) continue;
+    let x1 = a.x + a.w, y1 = a.y + a.h / 2;
+    let x2 = b.x,       y2 = b.y + b.h / 2;
+    if (b.x + b.w < a.x) { x1 = a.x; x2 = b.x + b.w; }
+    else if (Math.abs(b.x - a.x) < 40 && b.y > a.y) { x1 = a.x + a.w / 2; y1 = a.y + a.h; x2 = b.x + b.w / 2; y2 = b.y; }
+    else if (Math.abs(b.x - a.x) < 40 && b.y < a.y) { x1 = a.x + a.w / 2; y1 = a.y; x2 = b.x + b.w / 2; y2 = b.y + b.h; }
+    const dx = (x2 - x1);
+    const cx1 = x1 + Math.sign(dx || 1) * Math.max(40, Math.abs(dx) / 2);
+    const cx2 = x2 - Math.sign(dx || 1) * Math.max(40, Math.abs(dx) / 2);
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('class', `edge-path kind-${e.kind}`);
+    path.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`);
+    path.setAttribute('marker-end', `url(#arrow-${e.kind})`);
+    path.dataset.from = e.from; path.dataset.to = e.to; path.dataset.tag = (e.tag || []).join(',');
+    layer.appendChild(path);
+    if (e.label) {
+      const lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('class', `edge-label kind-${e.kind}`);
+      lbl.setAttribute('x', (x1 + x2) / 2);
+      lbl.setAttribute('y', (y1 + y2) / 2 - 4);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.textContent = e.label;
+      lbl.dataset.tag = (e.tag || []).join(',');
+      layer.appendChild(lbl);
+    }
+  }
+  root.appendChild(layer);
+}
+
+function renderNodes() {
+  const layer = document.createElementNS(NS, 'g');
+  layer.setAttribute('id', 'nodes');
+  for (const n of nodes) {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'node');
+    g.dataset.id = n.id; g.dataset.tag = (n.tag || []).join(',');
+    const rect = document.createElementNS(NS, 'rect');
+    rect.setAttribute('class', 'node-rect' + (n.critical ? ' critical' : ''));
+    rect.setAttribute('x', n.x); rect.setAttribute('y', n.y);
+    rect.setAttribute('width', n.w); rect.setAttribute('height', n.h);
+    rect.setAttribute('stroke', colorVar(n.color));
+    rect.dataset.id = n.id;
+    g.appendChild(rect);
+
+    const label = document.createElementNS(NS, 'text');
+    label.setAttribute('class', 'node-label');
+    label.setAttribute('x', n.x + 10);
+    label.setAttribute('y', n.y + 22);
+    label.textContent = n.label;
+    g.appendChild(label);
+
+    if (n.sub) {
+      const sub = document.createElementNS(NS, 'text');
+      let subCls = 'node-sub';
+      if (/DEAD|VACÍA|0 callers/i.test(n.sub)) subCls += ' dead';
+      else if (/canary/i.test(n.sub)) subCls += ' canary';
+      else if (/gigante|LOC|REAL/i.test(n.sub)) subCls += ' giant';
+      sub.setAttribute('class', subCls);
+      sub.setAttribute('x', n.x + 10);
+      sub.setAttribute('y', n.y + 38);
+      sub.textContent = n.sub;
+      g.appendChild(sub);
+    }
+
+    g.addEventListener('click', (ev) => { ev.stopPropagation(); selectNode(n.id); });
+    g.addEventListener('mouseenter', () => { if (!selectedNode) updateSidebarForNode(n); });
+    g.addEventListener('mouseleave', () => { if (!selectedNode) renderDefaultSidebar(); });
+    layer.appendChild(g);
+  }
+  root.appendChild(layer);
+}
+
+function renderFilters() {
+  for (const f of FILTER_CHIPS) {
+    const btn = document.createElement('button');
+    btn.className = 'chip' + (f.id === activeFilter ? ' active' : '') + (f.critical ? ' critical-chip' : '') + (f.dead ? ' dead-chip' : '');
+    btn.dataset.filter = f.id;
+    btn.textContent = f.label;
+    btn.addEventListener('click', () => setFilter(f.id));
+    filtersEl.appendChild(btn);
+  }
+}
+
+function setFilter(id) {
+  activeFilter = id;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === id));
+  applyFilter();
+}
+
+function applyFilter() {
+  document.querySelectorAll('.node').forEach(g => {
+    const tags = (g.dataset.tag || '').split(',');
+    g.querySelector('.node-rect').classList.toggle('dimmed', !tags.includes(activeFilter));
+  });
+  document.querySelectorAll('.edge-path').forEach(p => {
+    const tags = (p.dataset.tag || '').split(',');
+    p.classList.toggle('dimmed', !tags.includes(activeFilter));
+  });
+  document.querySelectorAll('.edge-label').forEach(t => {
+    const tags = (t.dataset.tag || '').split(',');
+    t.classList.toggle('dimmed', !tags.includes(activeFilter));
+  });
+}
+
+// ─── Sidebar ────────────────────────────────────────────────────────────────
+function escape(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]); }
+
+function renderDefaultSidebar() {
+  let html = `
+    <h2>CRM Academia Diabetes Online</h2>
+    <div class="path">${nodes.length} nodos · ${edges.length} edges · 6 clusters</div>
+    <h3>Hallazgos notables del mapa</h3>
+  `;
+  for (const f of FINDINGS) {
+    html += `<div class="finding"><strong>${escape(f.t)}</strong><br>${escape(f.d)}</div>`;
+  }
+  html += `
+    <h3>Leyenda de edges</h3>
+    <div class="legend">
+      <div><span style="background:var(--critical)"></span> Critical (onboarding)</div>
+      <div><span style="background:var(--client)"></span> Mount (React Router)</div>
+      <div><span style="background:var(--accent-2)"></span> API externa</div>
+      <div><span style="background:var(--db)"></span> DB read/write</div>
+      <div><span style="background:#555"></span> Llamada interna</div>
+    </div>
+    <h3>Cómo usar</h3>
+    <ul>
+      <li>Click en un nodo para ver detalle.</li>
+      <li>Click en filtros para destacar un flujo.</li>
+      <li>Arrastra para desplazar, rueda para zoom.</li>
+      <li>Click fuera de los nodos limpia la selección.</li>
+    </ul>
+  `;
+  sidebar.innerHTML = html;
+}
+
+function updateSidebarForNode(n) {
+  const inEdges = edges.filter(e => e.to === n.id);
+  const outEdges = edges.filter(e => e.from === n.id);
+  let html = `
+    <h2>${escape(n.label)}</h2>
+    <div class="role">${escape(n.role || '')}</div>
+    <div class="path">${escape(n.path || '')}</div>
+    ${n.sub ? `<div style="margin:6px 0 8px; color: var(--muted); font-size: 11px;">${escape(n.sub)}</div>` : ''}
+    <div class="plain">${escape(n.plain || '')}</div>
+  `;
+  if (n.tag && n.tag.length) {
+    html += `<div>${n.tag.map(t => `<span class="tag">${escape(t)}</span>`).join('')}</div>`;
+  }
+  if (n.notes && n.notes.length) {
+    html += `<h3>Notas</h3><ul>${n.notes.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
+  }
+  if (inEdges.length) {
+    html += `<h3>Entradas (${inEdges.length})</h3><ul class="edge-in">`;
+    for (const e of inEdges) {
+      const src = nodeById(e.from);
+      html += `<li><a href="#" data-goto="${e.from}">${escape(src ? src.label : e.from)}</a>${e.label ? ` <span class="tag">${escape(e.label)}</span>` : ''}</li>`;
+    }
+    html += '</ul>';
+  }
+  if (outEdges.length) {
+    html += `<h3>Salidas (${outEdges.length})</h3><ul class="edge-out">`;
+    for (const e of outEdges) {
+      const dst = nodeById(e.to);
+      html += `<li><a href="#" data-goto="${e.to}">${escape(dst ? dst.label : e.to)}</a>${e.label ? ` <span class="tag">${escape(e.label)}</span>` : ''}</li>`;
+    }
+    html += '</ul>';
+  }
+  sidebar.innerHTML = html;
+  sidebar.querySelectorAll('a[data-goto]').forEach(a => {
+    a.addEventListener('click', (ev) => { ev.preventDefault(); selectNode(a.dataset.goto); });
+  });
+}
+
+function selectNode(id) {
+  selectedNode = id;
+  document.querySelectorAll('.node-rect').forEach(r => r.classList.toggle('selected', r.dataset.id === id));
+  const n = nodeById(id);
+  if (n) updateSidebarForNode(n);
+}
+
+function clearSelection() {
+  selectedNode = null;
+  document.querySelectorAll('.node-rect').forEach(r => r.classList.remove('selected'));
+  renderDefaultSidebar();
+}
+
+// ─── Pan & zoom ─────────────────────────────────────────────────────────────
+let tx = 0, ty = 0, scale = 1;
+const wrap = document.getElementById('canvas-wrap');
+
+function applyTransform() { root.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`); }
+
+let dragging = false, lastX = 0, lastY = 0;
+wrap.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.node')) return;
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  wrap.classList.add('dragging');
+});
+window.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  const w = svg.viewBox.baseVal.width || 2360;
+  const h = svg.viewBox.baseVal.height || 1280;
+  const ratioX = w / wrap.clientWidth;
+  const ratioY = h / wrap.clientHeight;
+  tx += dx * ratioX / scale;
+  ty += dy * ratioY / scale;
+  applyTransform();
+});
+window.addEventListener('mouseup', () => { dragging = false; wrap.classList.remove('dragging'); });
+wrap.addEventListener('click', (e) => {
+  if (!e.target.closest('.node') && !dragging) clearSelection();
+});
+
+wrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const w = svg.viewBox.baseVal.width || 2360;
+  const h = svg.viewBox.baseVal.height || 1280;
+  const ratioX = w / wrap.clientWidth;
+  const ratioY = h / wrap.clientHeight;
+  const rect = wrap.getBoundingClientRect();
+  const mxView = (e.clientX - rect.left) * ratioX;
+  const myView = (e.clientY - rect.top) * ratioY;
+  const pX = (mxView - tx) / scale;
+  const pY = (myView - ty) / scale;
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  scale = Math.max(0.25, Math.min(4, scale * factor));
+  tx = mxView - pX * scale;
+  ty = myView - pY * scale;
+  applyTransform();
+}, { passive: false });
+
+document.getElementById('zoom-in').addEventListener('click', () => { scale = Math.min(4, scale * 1.2); applyTransform(); });
+document.getElementById('zoom-out').addEventListener('click', () => { scale = Math.max(0.25, scale / 1.2); applyTransform(); });
+document.getElementById('fit').addEventListener('click', () => { tx = 0; ty = 0; scale = 1; applyTransform(); });
+
+// ─── Bootstrap ──────────────────────────────────────────────────────────────
+renderClusters();
+renderEdges();
+renderNodes();
+renderFilters();
+applyFilter();
+renderDefaultSidebar();
+applyTransform();
+</script>
+</body>
+</html>
