@@ -45,6 +45,7 @@
   .chip.active { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
   .chip.critical-chip { border-left: 3px solid var(--critical); }
   .chip.dead-chip { color: var(--muted); }
+  .chip.roadmap-chip { border-left: 3px solid #41d77a; }
 
   #controls { display: flex; gap: 6px; }
   .ctrl-btn {
@@ -128,7 +129,7 @@
 
 <div id="container">
   <div id="canvas-wrap">
-    <svg id="map" viewBox="0 0 2360 1280" preserveAspectRatio="xMidYMid meet">
+    <svg id="map" viewBox="0 0 2360 1540" preserveAspectRatio="xMidYMid meet">
       <defs>
         <marker id="arrow-critical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
         <marker id="arrow-mount" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>
@@ -155,6 +156,7 @@ const clusters = [
   { id: 'services', label: 'Services (24)',    x: 1160, y: 120, w:  420, h: 1080 },
   { id: 'data',     label: 'Supabase backend', x: 1620, y: 120, w:  420, h: 1080 },
   { id: 'external', label: 'Integraciones',    x: 2080, y: 120, w:  240, h:  720 },
+  { id: 'cd-tabs',  label: 'ClientDetail.tsx — 8 tabs en un archivo gigante', x: 40, y: 1260, w: 2280, h: 240 },
 ];
 
 const N = (id, cluster, label, sub, x, y, w, h, color, opts = {}) => ({
@@ -773,6 +775,64 @@ const nodes = [
     notes: ['Solo genera links — no procesa pagos directamente'],
     tag: ['onboarding', 'accounting-renewals', 'all'],
   }),
+
+  // ─── CD-TABS — 8 tabs de ClientDetail.tsx (mapa de archivo gigante) ────────
+  N('cd-overview', 'cd-tabs', 'tab: overview', 'L.4246-4682 · ~440 LOC', 60, 1310, 260, 80, 'route', {
+    role: 'Tab "Vista Rápida": datos personales, contacto, baseline médica, estado, coach asignado',
+    plain: 'La primera pestaña que se ve al abrir un cliente. Resume lo esencial: quién es, cómo contactarle, su estado actual y a qué coach pertenece.',
+    path: 'components/ClientDetail.tsx:4246-4682',
+    notes: ['TabButton declarado L.4229', 'Render principal L.4246', 'También hay un bloque condicional L.8143 dentro del archivo'],
+    tag: ['client-detail', 'all'],
+  }),
+  N('cd-seguimiento', 'cd-tabs', 'tab: seguimiento', 'L.4683-5683 · ~1000 LOC', 340, 1310, 260, 80, 'route', {
+    role: 'Tab "Seguimiento": peso, glucosa, compliance, mini-charts',
+    plain: 'Datos cuantitativos del cliente a lo largo del tiempo. Gráficas de peso, glucosa, adherencia. Aquí se ve si el cliente está progresando.',
+    path: 'components/ClientDetail.tsx:4683-5683',
+    notes: ['TabButton L.4230', 'Render L.4683'],
+    tag: ['client-detail', 'ciclo-semanal', 'all'],
+  }),
+  N('cd-health', 'cd-tabs', 'tab: health', 'L.5684-7914 · ~2230 LOC · el más grande', 620, 1310, 260, 80, 'route', {
+    role: 'Tab "Salud": historia médica, medicación, insulina, sensor, datos hormonales, ciclo menstrual',
+    plain: 'La pestaña más densa del archivo: cabe casi un tercio de todo el código de ClientDetail. Toda la información clínica del cliente vive aquí, incluyendo el subtab de nutrición.',
+    path: 'components/ClientDetail.tsx:5684-7914',
+    notes: ['~2230 líneas — el tab más grande con diferencia', 'Subtab nutrition renderiza ClientNutritionSelector (~L.6315)', 'TabButton L.4231'],
+    tag: ['client-detail', 'nutrition', 'all'],
+  }),
+  N('cd-program', 'cd-tabs', 'tab: program', 'L.7915-8218 · ~304 LOC', 900, 1310, 260, 80, 'route', {
+    role: 'Tab "Programa": fases del contrato, plan de éxito, objetivos, milestones',
+    plain: 'Define en qué etapa de su programa está el cliente: entry, intermediate o advanced, con sus objetivos y milestones asociados.',
+    path: 'components/ClientDetail.tsx:7915-8218',
+    notes: ['TabButton L.4232'],
+    tag: ['client-detail', 'all'],
+  }),
+  N('cd-materials', 'cd-tabs', 'tab: materials', 'L.8233-8251 · ~19 LOC · delegado', 60, 1400, 260, 80, 'route', {
+    role: 'Tab "Materiales": plan de nutrición, recetas, módulos de training, documentos',
+    plain: 'Sospechosamente pequeño — son ~19 líneas que probablemente delegan a otro componente fuera de ClientDetail. Conviene verificar si hay lógica oculta o es un mero contenedor.',
+    path: 'components/ClientDetail.tsx:8233-8251',
+    notes: ['Tab pequeño en líneas: probablemente solo monta sub-componentes', 'TabButton L.4233'],
+    tag: ['client-detail', 'all'],
+  }),
+  N('cd-contract', 'cd-tabs', 'tab: contract', 'L.8252-8687 · ~436 LOC', 340, 1400, 260, 80, 'route', {
+    role: 'Tab "Contrato": renovación, pausas, ciclo de vida del contrato, PDF firmado',
+    plain: 'Todo lo administrativo: cuándo se firmó, cuándo vence, si está pausado, descargar el PDF firmado.',
+    path: 'components/ClientDetail.tsx:8252-8687',
+    notes: ['TabButton L.4234'],
+    tag: ['client-detail', 'accounting-renewals', 'all'],
+  }),
+  N('cd-notas', 'cd-tabs', 'tab: notas', 'L.8688-8972 · ~285 LOC', 620, 1400, 260, 80, 'route', {
+    role: 'Tab "Notas": apuntes del staff, audit log, comentarios internos',
+    plain: 'Notas que el coach o admin deja sobre el cliente. Es el "cuaderno" libre, fuera de campos estructurados.',
+    path: 'components/ClientDetail.tsx:8688-8972',
+    notes: ['Último tab del archivo', 'TabButton L.4235'],
+    tag: ['client-detail', 'all'],
+  }),
+  N('cd-performance', 'cd-tabs', 'tab: performance', 'L.8219-8232 · oculta de la barra', 900, 1400, 260, 80, 'route', {
+    role: 'Tab "performance" — existe en código pero NO está en la barra de tabs visible',
+    plain: 'Hay lógica que responde a activeTab=performance (L.1086, L.8219) pero ningún TabButton la declara en la barra. Es accesible solo por navegación programática o atajos. Posible feature en desarrollo o residuo.',
+    path: 'components/ClientDetail.tsx:8219-8232',
+    notes: ['No aparece en L.4229-4235 (la barra de tabs)', 'Sí aparece en L.1086 (load logic) y L.8219 (render)', 'Verificar si está accesible al usuario o es código huérfano'],
+    tag: ['client-detail', 'dead-code', 'all'],
+  }),
 ];
 
 // ============================================================================
@@ -891,6 +951,17 @@ const edges = [
 
   // ── Recovery hash interception
   { from: 'entry-tsx', to: 'data-auth-users', kind: 'api', label: 'recovery token', tag: ['all'] },
+
+  // ── ClientDetail → sus 8 tabs internos
+  { from: 'view-clientdetail', to: 'cd-overview',    kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-seguimiento', kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-health',      kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-program',     kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-materials',   kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-contract',    kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-notas',       kind: 'normal', label: '', tag: ['client-detail', 'all'] },
+  { from: 'view-clientdetail', to: 'cd-performance', kind: 'normal', label: 'oculta', tag: ['client-detail', 'dead-code', 'all'] },
+  { from: 'cd-health',         to: 'svc-nutritionService', kind: 'normal', label: 'subtab nutrición', tag: ['client-detail', 'nutrition', 'all'] },
 ];
 
 // ============================================================================
@@ -908,8 +979,38 @@ const FINDINGS = [
   { t: 'Resend no aparece en package.json', d: 'invite-user manda emails pero el SDK no está declarado en dependencias. Verificar si el SDK se carga desde Edge runtime o si está roto en producción.' },
   { t: 'scheduled-reminders es el único cron', d: 'Todo el ciclo semanal pasa por una sola Edge Function disparada por pg_cron. Single point of failure: si falla, ningún cliente recibe recordatorio el viernes/domingo.' },
   { t: 'RLS de clientes_ado_notion permisiva', d: '"Staff see all clients" deja a cualquier miembro del equipo ver datos médicos (property_insulina, property_patologias, property_medicacion). Relevante para RGPD.' },
-  { t: 'ClientDetail.tsx 8.972 LOC en 8 tabs', d: 'overview · seguimiento · performance · health · program · contract · materials · notas. El bulto de la deuda técnica vive aquí — refactor candidato pero alto riesgo.' },
+  { t: 'ClientDetail.tsx 8.972 LOC en 8 tabs', d: 'overview · seguimiento · health · program · materials · contract · notas (+ performance oculta). El bulto de la deuda técnica vive aquí — refactor candidato pero alto riesgo.' },
 ];
+
+// ============================================================================
+//  ROADMAP & BUGS — overlay opcional
+// ============================================================================
+const KNOWN_BUGS = {
+  'data-clientes':           [{ sev: 'high', ref: 'RLS', t: '"Staff see all clients" expone property_insulina, property_patologias, property_medicacion — relevante RGPD' }],
+  'data-training-programs':  [{ sev: 'high', ref: 'BUG-T1', t: 'visibility_scope no aplicado: editar un programa global afecta a todos los clientes que lo tienen asignado' }],
+  'data-users':              [{ sev: 'med',  t: 'public.users ↔ auth.users desincronizado — pendiente fix con función + trigger' }],
+  'data-scheduled-reminders':[{ sev: 'med',  t: 'Único cron del sistema sin retry ni alerting — SPOF del ciclo semanal' }],
+  'ext-resend':              [{ sev: 'low',  t: 'SDK no aparece en package.json — verificar si está activo en producción' }],
+  'svc-mockSupabase':        [{ sev: 'med',  t: '2.917 LOC mal nombrado: es la capa REAL de Supabase, todo pasa por aquí. Renombrar + segmentar es alto valor pero alto riesgo' }],
+  'svc-nutritionService':    [{ sev: 'low',  t: '1.899 LOC divisible en 3 (plans / assignments / recipes) sin tocar nada más' }],
+  'view-clientdetail':       [{ sev: 'med',  t: '8.972 LOC en un solo archivo — la mayor deuda concentrada del repo' }],
+  'view-storyteller':        [{ sev: 'low',  t: 'Módulo muerto: 2 archivos sin imports externos. Borrar.' }],
+  'view-admindata':          [{ sev: 'low',  t: 'Carpeta vacía. Borrar.' }],
+  'entry-supabase':          [{ sev: 'low',  t: 'Fallback hardcoded a credentials del proyecto si falta .env; debería avisar / abortar' }],
+  'aud-portal-flag':         [{ sev: 'low',  t: 'Feature flag literal en código en vez de tabla o servicio' }],
+  'entry-appcontent':        [{ sev: 'low',  t: '55+ activeView en un switch monolítico + sin AuthProvider central' }],
+  'cd-performance':          [{ sev: 'low',  t: 'Tab "performance" en código pero fuera de la barra visible — código huérfano o feature inacabada' }],
+};
+
+const FIXES = {
+  'data-training-programs':  [{ n: 1, t: 'Replicar patrón commit 5fce818 (visibilityScope) — ~1.5h' }],
+  'view-storyteller':        [{ n: 1, t: 'rm -rf components/storyteller/ — ~5 min' }],
+  'view-admindata':          [{ n: 1, t: 'rm -rf components/admin-data-center/ — ~5 min' }],
+  'svc-nutritionService':    [{ n: 1, t: 'Dividir en plans / assignments / recipes — ~1 día' }],
+  'data-users':              [{ n: 1, t: 'Trigger Postgres: sincroniza auth.users → public.users en INSERT — ~2-4h' }],
+  'data-clientes':           [{ n: 1, t: 'Auditar política RLS, restringir staff a sus clientes — ~1-2 días' }],
+  'data-scheduled-reminders':[{ n: 1, t: 'Añadir retry + alerting al fallo — ~4h' }],
+};
 
 // ============================================================================
 //  RENDER
@@ -928,9 +1029,15 @@ const FILTER_CHIPS = [
   { id: 'training', label: 'Training' },
   { id: 'client-portal', label: 'Portal cliente' },
   { id: 'accounting-renewals', label: 'Contabilidad / Renovaciones' },
+  { id: 'client-detail', label: 'ClientDetail (tabs)' },
   { id: 'dead-code', label: 'Código muerto', dead: true },
+  { id: 'roadmap-bugs', label: 'Roadmap & bugs', roadmap: true },
   { id: 'all', label: 'Mostrar todo' },
 ];
+
+function nodeHasBadge(id) {
+  return (KNOWN_BUGS[id] && KNOWN_BUGS[id].length) || (FIXES[id] && FIXES[id].length);
+}
 
 let activeFilter = 'overview';
 let selectedNode = null;
@@ -1030,6 +1137,45 @@ function renderNodes() {
       g.appendChild(sub);
     }
 
+    // Badges (bugs y fixes)
+    const bugs = KNOWN_BUGS[n.id] || [];
+    const fixes = FIXES[n.id] || [];
+    if (bugs.length || fixes.length) {
+      const badges = document.createElementNS(NS, 'g');
+      badges.setAttribute('class', 'badges');
+      let bx = n.x + n.w - 14;
+      if (bugs.length) {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', bx); c.setAttribute('cy', n.y + 14);
+        c.setAttribute('r', 9); c.setAttribute('fill', 'var(--critical)');
+        c.setAttribute('stroke', 'var(--bg)'); c.setAttribute('stroke-width', 1.5);
+        badges.appendChild(c);
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', bx); t.setAttribute('y', n.y + 18);
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('fill', '#fff'); t.setAttribute('font-size', 10); t.setAttribute('font-weight', 700);
+        t.setAttribute('pointer-events', 'none');
+        t.textContent = bugs.length;
+        badges.appendChild(t);
+        bx -= 22;
+      }
+      if (fixes.length) {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', bx); c.setAttribute('cy', n.y + 14);
+        c.setAttribute('r', 9); c.setAttribute('fill', '#41d77a');
+        c.setAttribute('stroke', 'var(--bg)'); c.setAttribute('stroke-width', 1.5);
+        badges.appendChild(c);
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', bx); t.setAttribute('y', n.y + 18);
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('fill', '#0b3a1e'); t.setAttribute('font-size', 10); t.setAttribute('font-weight', 700);
+        t.setAttribute('pointer-events', 'none');
+        t.textContent = fixes.length;
+        badges.appendChild(t);
+      }
+      g.appendChild(badges);
+    }
+
     g.addEventListener('click', (ev) => { ev.stopPropagation(); selectNode(n.id); });
     g.addEventListener('mouseenter', () => { if (!selectedNode) updateSidebarForNode(n); });
     g.addEventListener('mouseleave', () => { if (!selectedNode) renderDefaultSidebar(); });
@@ -1041,7 +1187,7 @@ function renderNodes() {
 function renderFilters() {
   for (const f of FILTER_CHIPS) {
     const btn = document.createElement('button');
-    btn.className = 'chip' + (f.id === activeFilter ? ' active' : '') + (f.critical ? ' critical-chip' : '') + (f.dead ? ' dead-chip' : '');
+    btn.className = 'chip' + (f.id === activeFilter ? ' active' : '') + (f.critical ? ' critical-chip' : '') + (f.dead ? ' dead-chip' : '') + (f.roadmap ? ' roadmap-chip' : '');
     btn.dataset.filter = f.id;
     btn.textContent = f.label;
     btn.addEventListener('click', () => setFilter(f.id));
@@ -1056,17 +1202,30 @@ function setFilter(id) {
 }
 
 function applyFilter() {
+  const roadmap = activeFilter === 'roadmap-bugs';
   document.querySelectorAll('.node').forEach(g => {
+    const id = g.dataset.id;
     const tags = (g.dataset.tag || '').split(',');
-    g.querySelector('.node-rect').classList.toggle('dimmed', !tags.includes(activeFilter));
+    const include = roadmap ? nodeHasBadge(id) : tags.includes(activeFilter);
+    g.querySelector('.node-rect').classList.toggle('dimmed', !include);
+    const badges = g.querySelector('.badges');
+    if (badges) badges.style.opacity = include ? 1 : 0.18;
   });
   document.querySelectorAll('.edge-path').forEach(p => {
-    const tags = (p.dataset.tag || '').split(',');
-    p.classList.toggle('dimmed', !tags.includes(activeFilter));
+    if (roadmap) {
+      const ok = nodeHasBadge(p.dataset.from) && nodeHasBadge(p.dataset.to);
+      p.classList.toggle('dimmed', !ok);
+    } else {
+      const tags = (p.dataset.tag || '').split(',');
+      p.classList.toggle('dimmed', !tags.includes(activeFilter));
+    }
   });
   document.querySelectorAll('.edge-label').forEach(t => {
-    const tags = (t.dataset.tag || '').split(',');
-    t.classList.toggle('dimmed', !tags.includes(activeFilter));
+    if (roadmap) { t.classList.add('dimmed'); }
+    else {
+      const tags = (t.dataset.tag || '').split(',');
+      t.classList.toggle('dimmed', !tags.includes(activeFilter));
+    }
   });
 }
 
@@ -1090,6 +1249,12 @@ function renderDefaultSidebar() {
       <div><span style="background:var(--accent-2)"></span> API externa</div>
       <div><span style="background:var(--db)"></span> DB read/write</div>
       <div><span style="background:#555"></span> Llamada interna</div>
+    </div>
+    <h3>Badges en los nodos</h3>
+    <div class="legend">
+      <div><span style="background:var(--critical); border-radius:50%; width:10px; height:10px"></span> Bugs / deuda con número</div>
+      <div><span style="background:#41d77a; border-radius:50%; width:10px; height:10px"></span> Fixes accionables con número</div>
+      <div style="margin-top:4px; color:var(--muted)">Filter chip "Roadmap & bugs" aísla solo los nodos con badges.</div>
     </div>
     <h3>Cómo usar</h3>
     <ul>
@@ -1117,6 +1282,22 @@ function updateSidebarForNode(n) {
   }
   if (n.notes && n.notes.length) {
     html += `<h3>Notas</h3><ul>${n.notes.map(x => `<li>${escape(x)}</li>`).join('')}</ul>`;
+  }
+  const bugs = KNOWN_BUGS[n.id] || [];
+  if (bugs.length) {
+    html += `<h3>🔴 Bugs (${bugs.length})</h3><ul>`;
+    for (const b of bugs) {
+      const sev = b.sev ? `<span class="tag" style="background:var(--critical);color:#fff">${escape(b.sev)}</span>` : '';
+      const ref = b.ref ? `<span class="tag">${escape(b.ref)}</span>` : '';
+      html += `<li>${sev}${ref} ${escape(b.t)}</li>`;
+    }
+    html += '</ul>';
+  }
+  const fxs = FIXES[n.id] || [];
+  if (fxs.length) {
+    html += `<h3>🟢 Fixes (${fxs.length})</h3><ul>`;
+    for (const fx of fxs) html += `<li>#${fx.n}. ${escape(fx.t)}</li>`;
+    html += '</ul>';
   }
   if (inEdges.length) {
     html += `<h3>Entradas (${inEdges.length})</h3><ul class="edge-in">`;
